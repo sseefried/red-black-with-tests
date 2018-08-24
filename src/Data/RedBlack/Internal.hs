@@ -1,11 +1,11 @@
 module Data.RedBlack.Internal where
 
-data Color = R | B deriving Show
+data Color = R | B deriving (Eq, Show)
 
-data Tree a = E | T Color (Tree a) a (Tree a) deriving Show
+data Tree a = E | T Color (Tree a) a (Tree a) deriving (Eq, Show)
 
 -- Invariants
--- 1. No red node has a red parent
+-- 1. No red node has a red parent (equilvalently no red node has red children)
 -- 2. Every path from the root node to an empty node contains the same number of black nodes
 -- 3. The root and leaves of the tree are black
 
@@ -109,3 +109,29 @@ fuse (T B t1 x t2) (T B t3 y t4)  =
 height :: Tree a -> Int
 height E            = 0
 height (T _ t _ t') = 1 + max (height t) (height t')
+
+valid :: Tree a -> Bool
+valid t = redNodesHaveBlackChildren t && allEqual (blackNodes t)
+  where
+    redNodesHaveBlackChildren = go
+      where
+        go (T R t1 _ t2) = colorOf t1 /= R && colorOf t2 /= R
+        go _ = True
+
+    colorOf E = B
+    colorOf (T col _ _ _ ) = col
+
+    allEqual [] = True
+    allEqual (x:xs) = all (==x) xs
+
+--
+-- returns a list containing values, one for each leaf node. Each value
+-- is the number of black nodes seen on the way to that leaf.
+--
+blackNodes :: Tree a -> [Int]
+blackNodes = go 0
+  where
+    foo B = 1
+    foo R = 0
+    go n E = [n + 1]
+    go n (T col t1 _ t2) = go (foo col + n) t1 ++ go (foo col + n) t2
