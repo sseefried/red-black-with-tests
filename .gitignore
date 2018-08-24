@@ -1,0 +1,5 @@
+dist/
+.stack-work/
+red-black.cabal
+*~
+.cabal-sandbox
