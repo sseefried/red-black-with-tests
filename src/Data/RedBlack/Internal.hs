@@ -1,5 +1,8 @@
 module Data.RedBlack.Internal where
 
+-- From:
+-- https://www.cs.kent.ac.uk/people/staff/smk/redblack/rb.html
+--
 data Color = R | B deriving (Eq, Show)
 
 data Tree a = E | T Color (Tree a) a (Tree a) deriving (Eq, Show)
@@ -10,101 +13,91 @@ data Tree a = E | T Color (Tree a) a (Tree a) deriving (Eq, Show)
 -- 3. The root and leaves of the tree are black
 
 -- | Simple Tree operations
-
 empty :: Tree a
 empty = E
 
-member :: (Ord a) => a -> Tree a -> Bool
-member _ E    = False
-member x (T _ a y b)
-  | x < y     = member x a
-  | x == y    = True
-  | otherwise = member x b
-
--- | Insertion
-insert :: (Ord a) => a -> Tree a -> Tree a
-insert x s = makeBlack $ ins s
+{- Insertion and membership test as by Okasaki -}
+insert :: Ord a => a -> Tree a -> Tree a
+insert x tree =
+  T B lt v rt
   where
-    ins E  = T R E x E
-    ins (T color a y b)
-      | x < y     = balance color (ins a) y b
-      | x == y    = T color a y b
-      | otherwise = balance color a y (ins b)
+  T _ lt v rt = ins tree
+  ins E = T R E x E
+  ins s@(T col a y b)
+    | x<y = balance col (ins a) y b
+    | x>y = balance col a y (ins b)
+    | otherwise = s
+  -- ins s@(T R a y b)
+  --   | x<y = T R (ins a) y b
+  --   | x>y = T R a y (ins b)
+  --   | otherwise = s
 
+member :: Ord a => a -> Tree a -> Bool
+member _ E = False
+member x (T _ a y b)
+  | x<y = member x a
+  | x>y = member x b
+  | otherwise = True
 
+{- balance: first equation is new,
+   to make it work with a weaker invariant -}
 balance :: Color -> Tree a -> a -> Tree a -> Tree a
+-- balance B (T R a x b) y (T R c z d) = T R (T B a x b) y (T B c z d)
 balance B (T R (T R a x b) y c) z d = T R (T B a x b) y (T B c z d)
 balance B (T R a x (T R b y c)) z d = T R (T B a x b) y (T B c z d)
-balance B a x (T R (T R b y c) z d) = T R (T B a x b) y (T B c z d)
 balance B a x (T R b y (T R c z d)) = T R (T B a x b) y (T B c z d)
-balance color a x b = T color a x b
+balance B a x (T R (T R b y c) z d) = T R (T B a x b) y (T B c z d)
+balance col a x b = T col a x b
 
+{- deletion a la SMK -}
 delete :: Ord a => a -> Tree a -> Tree a
-delete x t = makeBlack $ del x t
+delete x t =
+  case del t of {T _ a y b -> T B a y b; _ -> E}
+  where
+  del E = E
+  del (T _ a y b)
+      | x<y = delformLeft a y b
+      | x>y = delformRight a y b
+            | otherwise = app a b
+  delformLeft a@(T B _ _ _) y b = balleft (del a) y b
+  delformLeft a y b = T R (del a) y b
+  delformRight a y b@(T B _ _ _) = balright a y (del b)
+  delformRight a y b = T R a y (del b)
 
-makeBlack :: Tree a -> Tree a
-makeBlack (T _ a y b) = T B a y b
-makeBlack E           = E
+balleft :: Tree a -> a -> Tree a -> Tree a
+balleft (T R a x b) y c = T R (T B a x b) y c
+balleft bl x (T B a y b) = balance B bl x (T R a y b)
+balleft bl x (T R (T B a y b) z c) = T R (T B bl x a) y (balance B b z (sub1 c))
+balleft _ _ _ = error "unexpected input"
 
--- Delete with consecutive red nodes at the top which is rectified in delete
-del :: (Ord a) => a -> Tree a -> Tree a
-del x t@(T _ l y r)
-  | x < y = delL x t
-  | x > y = delR x t
-  | otherwise = fuse l r
-del _ E = error "Cannot delete from an empty tree"
+balright :: Tree a -> a -> Tree a -> Tree a
+balright a x (T R b y c) = T R a x (T B b y c)
+balright (T B a x b) y bl = balance B (T R a x b) y bl
+balright (T R a x (T B b y c)) z bl = T R (balance B (sub1 a) x b) y (T B c z bl)
+balright _ _ _ = error "unexpected input"
 
--- We are in the current node and about to traverse in the left child
--- We have 2 options
--- 1. If it(the ccurent node i.e t) is black delelte from t1 and then balance.
--- 2. If it is red delete from t1 and no need to balance because there are no cases
-delL :: (Ord a) => a -> Tree a -> Tree a
-delL x (T B t1 y t2) = balL $ T B (del x t1) y t2
-delL x (T R t1 y t2) = T R (del x t1) y t2
-delL _ E = error "Cannot delete from an empty tree"
+sub1 :: Tree a -> Tree a
+sub1 (T B a x b) = T R a x b
+sub1 _ = error "invariance violation"
 
+app :: Tree a -> Tree a -> Tree a
+app E x = x
+app x E = x
+app (T R a x b) (T R c y d) =
+  case app b c of
+      T R b' z c' -> T R (T R a x b') z (T R c' y d)
+      bc -> T R a x (T R bc y d)
+app (T B a x b) (T B c y d) =
+  case app b c of
+      T R b' z c' -> T R (T B a x b') z (T B c' y d)
+      bc -> balleft a x (T B bc y d)
+app a (T R b x c) = T R (app a b) x c
+app (T R a x b) c = T R a x (app b c)
 
-balL :: Tree a -> Tree a
-balL (T B (T R t1 x t2) y t3) = T R (T B t1 x t2) y t3
-balL (T B t1 y (T B t2 z t3)) = balance B t1 y (T R t2 z t3)      -- t1 root is black in both the last cases because red is handled at the top
-balL (T B t1 y (T R (T B t2 u t3) z (T B l value r))) =
-  T R (T B t1 y t2) u (balance B t3 z (T R l value r))
-balL t = t
+--
+-- Testing functions
+--
 
-
--- We are in the current node and about to traverse in the right child
--- We have 2 options
--- 1. If it(the ccurent node i.e t) is black delelte from t2 and then balance.
--- 2. If it is red delete from t2 and no need to balance because there are no cases
-delR :: (Ord a) => a -> Tree a -> Tree a
-delR x (T B t1 y t2) = balR $ T B t1 y (del x t2)
-delR x (T R t1 y t2) = T R t1 y (del x t2)
-delR _ E = error "cannot delete from empty tree"
-
-balR :: Tree a -> Tree a
-balR (T B t1 y (T R t2 x t3)) = T R t1 y (T B t2 x t3)
-balR (T B (T B t1 z t2) y t3) = balance B (T R t1 z t2) y t3       -- t3 root is black in both the last cases because red is handled at the top
-balR (T B (T R (T B l value r) z (T B t2 u t3)) y t4) =
-  T R (balance B (T R l value r) z t2) u (T B t3 y t4)
-balR t = t
-
-fuse :: Tree a -> Tree a -> Tree a
-fuse E t = t
-fuse t E = t
-fuse t1@(T B _ _ _) (T R t3 y t4) = T R (fuse t1 t3) y t4
-fuse (T R t1 x t2) t3@(T B _ _ _) = T R t1 x (fuse t2 t3)
-fuse (T R t1 x t2) (T R t3 y t4)  =
-  let s = fuse t2 t3
-  in case s of
-       (T R s1 z s2) -> (T R (T R t1 x s1) z (T R s2 y t4))
-       (T B _ _ _)   -> (T R t1 x (T R s y t4))
-       E             -> E
-fuse (T B t1 x t2) (T B t3 y t4)  =
-  let s = fuse t2 t3
-  in case s of
-       (T R s1 z s2) -> (T R (T B t1 x s1) z (T B s2 y t4)) -- consfusing case
-       (T B _ _ _)   -> balL (T B t1 x (T B s y t4))
-       E             -> E
 
 height :: Tree a -> Int
 height E            = 0
