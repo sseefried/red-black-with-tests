@@ -12,3 +12,17 @@ library.
 $ cabal sandbox init
 $ cabal install --only-dependencies  --enable-tests
 ```
+
+### Using `ghcid`
+
+If you want to use Neil Mitchell's
+[ghcid](https://github.com/ndmitchell/ghcid) tool run
+
+    $ ./ghcid-dev.sh
+
+While writing tests use:
+
+    $ ./ghci-test.sh
+
+Be aware that if you change the implementation of the library while writing
+the tests you will need to Ctrl-C and restart `ghci-test.sh`.

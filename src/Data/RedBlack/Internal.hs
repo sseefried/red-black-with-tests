@@ -124,7 +124,7 @@ valid t = redNodesHaveBlackChildren t && allEqual (blackNodes t)
 blackNodes :: Tree a -> [Int]
 blackNodes = go 0
   where
-    foo B = 1
-    foo R = 0
+    numBlack B = 1
+    numBlack R = 0
     go n E = [n + 1]
-    go n (T col t1 _ t2) = go (foo col + n) t1 ++ go (foo col + n) t2
+    go n (T col t1 _ t2) = go (numBlack col + n) t1 ++ go (numBlack col + n) t2
